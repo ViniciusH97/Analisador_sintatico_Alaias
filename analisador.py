@@ -251,7 +251,8 @@ class AnalisadorSintatico:
     def _analisar_comando(self) -> Optional[NoSintatico]:
         """
         Comando -> DeclaracaoVariavel | Atribuicao | ComandoInput | ComandoOutput | 
-                   EstruturaCondicional | EstruturaRepeticao | ComandoBreakLine | DeclaracaoFuncao
+                   EstruturaCondicional | EstruturaRepeticao | ComandoBreakLine | 
+                   DeclaracaoFuncao | ChamadaFuncao
         """
         token = self._token_atual()
         if not token:
@@ -262,7 +263,12 @@ class AnalisadorSintatico:
         elif token.tipo == TokenType.FUNCTION:
             return self._analisar_declaracao_funcao()
         elif token.tipo == TokenType.IDENTIFICADOR:
-            return self._analisar_atribuicao()
+            # Verifica se é uma chamada de função (identificador seguido de parênteses)
+            if (self.posicao + 1 < len(self.tokens) and 
+                self.tokens[self.posicao + 1].tipo == TokenType.ABRE_PARENT):
+                return self._analisar_chamada_funcao()
+            else:
+                return self._analisar_atribuicao()
         elif token.tipo == TokenType.INPUT:
             return self._analisar_comando_input()
         elif token.tipo == TokenType.WRT:
@@ -359,6 +365,30 @@ class AnalisadorSintatico:
         
         # ')'
         if self._consumir_token(TokenType.FECHA_PARENT, "Esperado ')' para fechar declaração da função"):
+            no_fecha = NoSintatico("FECHA_PARENTESES", ")")
+            no.adicionar_filho(no_fecha)
+        
+        return no
+    
+    def _analisar_chamada_funcao(self) -> NoSintatico:
+        """
+        ChamadaFuncao -> Identificador '(' ')'
+        """
+        no = NoSintatico("CHAMADA_FUNCAO")
+        
+        # Nome da função (identificador)
+        token_nome = self._consumir_token(TokenType.IDENTIFICADOR, "Esperado nome da função")
+        if token_nome:
+            no_nome = NoSintatico("NOME_FUNCAO", token_nome.lexema, token=token_nome)
+            no.adicionar_filho(no_nome)
+        
+        # '('
+        if self._consumir_token(TokenType.ABRE_PARENT, "Esperado '(' após nome da função"):
+            no_abre = NoSintatico("ABRE_PARENTESES", "(")
+            no.adicionar_filho(no_abre)
+        
+        # ')'
+        if self._consumir_token(TokenType.FECHA_PARENT, "Esperado ')' para fechar chamada da função"):
             no_fecha = NoSintatico("FECHA_PARENTESES", ")")
             no.adicionar_filho(no_fecha)
         

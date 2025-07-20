@@ -461,7 +461,7 @@ class AnalisadorSintatico:
             no.adicionar_filho(condicao)
         
         # Comandos do 'cdt'
-        comandos_if = self._analisar_bloco_comandos()
+        comandos_if = self._analisar_bloco_comandos("COND_SE")
         if comandos_if:
             no.adicionar_filho(comandos_if)
         
@@ -474,7 +474,7 @@ class AnalisadorSintatico:
             if condicao_senaose:
                 no_senaose.adicionar_filho(condicao_senaose)
             
-            comandos_senaose = self._analisar_bloco_comandos()
+            comandos_senaose = self._analisar_bloco_comandos("COND_SENAOSE")
             if comandos_senaose:
                 no_senaose.adicionar_filho(comandos_senaose)
             
@@ -485,7 +485,7 @@ class AnalisadorSintatico:
             self._avancar()
             no_senao = NoSintatico("SENAO")
             
-            comandos_senao = self._analisar_bloco_comandos()
+            comandos_senao = self._analisar_bloco_comandos("COND_SENAO")
             if comandos_senao:
                 no_senao.adicionar_filho(comandos_senao)
             
@@ -511,7 +511,7 @@ class AnalisadorSintatico:
             if condicao:
                 no.adicionar_filho(condicao)
             
-            comandos = self._analisar_bloco_comandos()
+            comandos = self._analisar_bloco_comandos("REP_PARA")
             if comandos:
                 no.adicionar_filho(comandos)
                 
@@ -524,7 +524,7 @@ class AnalisadorSintatico:
             if condicao:
                 no.adicionar_filho(condicao)
             
-            comandos = self._analisar_bloco_comandos()
+            comandos = self._analisar_bloco_comandos("REP_ENQUANTO")
             if comandos:
                 no.adicionar_filho(comandos)
                 
@@ -560,7 +560,7 @@ class AnalisadorSintatico:
             if valor:
                 no.adicionar_filho(valor)
             
-            comandos = self._analisar_bloco_comandos()
+            comandos = self._analisar_bloco_comandos("REP_RANGE")
             if comandos:
                 no.adicionar_filho(comandos)
         
@@ -582,31 +582,40 @@ class AnalisadorSintatico:
         
         return expressao
     
-    def _analisar_bloco_comandos(self) -> Optional[NoSintatico]:
+    def _analisar_bloco_comandos(self, contexto_pai: str = "") -> Optional[NoSintatico]:
         """Analisa um bloco de comandos até encontrar uma palavra-chave de fechamento."""
         bloco = NoSintatico("BLOCO_COMANDOS")
         
-        while (self._token_atual() and 
-               self._token_atual().tipo not in [
-                   TokenType.COND_SENAO, TokenType.COND_SENAOSE, 
-                   TokenType.EOF
-               ]):
+        while self._token_atual() and self._token_atual().tipo != TokenType.EOF:
+            token = self._token_atual()
             
             # Ignora quebras de linha
             if self._verificar_token(TokenType.NEWLINE):
                 self._avancar()
                 continue
             
-            # Verifica se chegou ao final de um bloco
-            if (self._token_atual().tipo in [TokenType.COND_SE, TokenType.REP_PARA, 
-                                           TokenType.REP_ENQUANTO, TokenType.REP_RANGE] and 
-                len(bloco.filhos) > 0):
+            # Para quando encontra tokens que finalizam blocos condicionais
+            if token.tipo in [TokenType.COND_SENAO, TokenType.COND_SENAOSE]:
                 break
+            
+            # Para quando encontra uma nova estrutura de controle no mesmo nível 
+            # (apenas se já temos comandos no bloco)
+            if (token.tipo in [TokenType.COND_SE, TokenType.REP_PARA, 
+                              TokenType.REP_ENQUANTO, TokenType.REP_RANGE] and 
+                len(bloco.filhos) > 0):
+                # Se estamos em um contexto de repetição e encontramos outra estrutura de controle,
+                # isso indica o fim do bloco de repetição
+                if contexto_pai in ["REP_PARA", "REP_ENQUANTO", "REP_RANGE"]:
+                    break
+                # Se estamos em um contexto condicional, só paramos em estruturas de mesmo nível
+                elif contexto_pai == "COND_SE" and token.tipo == TokenType.COND_SE:
+                    break
             
             comando = self._analisar_comando()
             if comando:
                 bloco.adicionar_filho(comando)
             else:
+                # Se não conseguiu analisar comando, para para evitar loop infinito
                 break
         
         return bloco if bloco.filhos else None
